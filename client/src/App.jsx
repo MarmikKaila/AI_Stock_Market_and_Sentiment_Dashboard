@@ -5,7 +5,7 @@ import Dashboard from "./pages/Dashboard";
 function App() {
   return (
     <div className="bg-black min-h-screen">
-      <Navbar />
+
       <Dashboard />
     </div>
   );
