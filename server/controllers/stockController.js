@@ -1,4 +1,3 @@
-// server/controllers/stockController.js
 const Stock = require("../models/Stock");
 const { fetchFundamentalsAlpha, fetchLatestPrice } = require("../services/stockService");
 const { fetchNews } = require("../services/newsService");
