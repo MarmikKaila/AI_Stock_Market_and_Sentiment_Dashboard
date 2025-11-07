@@ -40,3 +40,90 @@
 .read-the-docs {
   color: #888;
 }
+.bg-gray-900 {
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.05);
+  transition: box-shadow 0.3s ease, transform 0.3s ease;
+}
+
+.bg-gray-900:hover {
+  box-shadow: 0 0 25px rgba(16, 185, 129, 0.2);
+  transform: translateY(-2px);
+}
+@keyframes fadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fadeIn {
+  animation: fadeIn 0.8s ease-out;
+}
+
+/* Glow and hover effects */
+.bg-gray-900 {
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.05);
+  transition: box-shadow 0.3s ease, transform 0.3s ease;
+}
+
+.bg-gray-900:hover {
+  box-shadow: 0 0 25px rgba(16, 185, 129, 0.2);
+  transform: translateY(-2px);
+}
+
+/* Background with faint glow */
+body {
+  background: radial-gradient(circle at top, rgba(16, 185, 129, 0.05), #000);
+  color-scheme: dark;
+  font-family: 'Inter', sans-serif;
+}
+
+/* Navbar subtle entrance animation */
+nav {
+  animation: slideDown 0.6s ease-out;
+}
+
+@keyframes slideDown {
+  0% {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+/* Soft glowing pulse for Positive sentiment */
+@keyframes pulseSlow {
+  0% {
+    box-shadow: 0 0 0 rgba(16, 185, 129, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 15px rgba(16, 185, 129, 0.6);
+  }
+  100% {
+    box-shadow: 0 0 0 rgba(16, 185, 129, 0.4);
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulseSlow 2.5s infinite ease-in-out;
+}
+/* Smooth card fade/entry animation */
+@keyframes fadeUp {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeUp {
+  animation: fadeUp 0.6s ease-out;
+}

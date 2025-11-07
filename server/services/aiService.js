@@ -2,24 +2,39 @@ const axios = require('axios');
 
 // Try multiple Gemini models in order of preference
 const GEMINI_MODELS = [
-    'gemini-2.0-flash-exp',
     'gemini-1.5-flash',
     'gemini-1.5-flash-latest',
-    'gemini-1.5-pro',
+    'gemini-1.5-pro-latest',
     'gemini-pro'
 ];
 
 let workingModel = null;
+let modelCheckCompleted = false;
+let modelCheckFailed = false;
 
 async function findWorkingModel() {
-    if (workingModel) return workingModel;
+    // Return cached result if already checked
+    if (modelCheckCompleted) {
+        return workingModel;
+    }
+
+    // Prevent duplicate checks
+    if (modelCheckFailed) {
+        return null;
+    }
 
     const geminiKey = process.env.GEMINI_API_KEY;
-    if (!geminiKey) return null;
+    if (!geminiKey) {
+        console.warn('⚠️ GEMINI_API_KEY not configured in environment variables.');
+        modelCheckFailed = true;
+        modelCheckCompleted = true;
+        return null;
+    }
 
     for (const model of GEMINI_MODELS) {
         try {
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
+            const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${geminiKey}`;
+
             const response = await axios.post(
                 url,
                 {
@@ -35,6 +50,7 @@ async function findWorkingModel() {
 
             if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
                 workingModel = model;
+                modelCheckCompleted = true;
                 console.log(`✅ Using Gemini model: ${model}`);
                 return model;
             }
@@ -44,7 +60,12 @@ async function findWorkingModel() {
         }
     }
 
-    console.warn('⚠️ No working Gemini model found, using fallback methods');
+    console.warn('⚠️ No working Gemini model found. Using fallback analysis methods.');
+    console.warn('   → Check GEMINI_API_KEY in your .env file');
+    console.warn('   → Get a key from: https://makersuite.google.com/app/apikey');
+    
+    modelCheckFailed = true;
+    modelCheckCompleted = true;
     return null;
 }
 
@@ -62,8 +83,8 @@ async function callGeminiAPI(messages, options = {}) {
     const combinedPrompt = messages.map(m => m.content).join('\n\n');
 
     try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
-        
+        const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${geminiKey}`;
+
         const response = await axios.post(
             url,
             {
@@ -134,7 +155,7 @@ Based on this data, provide ONLY ONE WORD as your recommendation: BUY, HOLD, or 
 
         return getSimpleRecommendation(fundamentals, sentimentScore);
     } catch (error) {
-        console.error('AI Service error:', error.message);
+        console.error('AI Service error, using fallback recommendation:', error.message);
         return getSimpleRecommendation(fundamentals, sentimentScore);
     }
 }
@@ -146,6 +167,12 @@ async function summarizeNews(article) {
     }
 
     try {
+        const model = await findWorkingModel();
+        if (!model) {
+            // Fallback: return first 150 characters
+            return article.substring(0, 150) + '...';
+        }
+
         const messages = [
             { 
                 role: 'user', 
@@ -154,7 +181,7 @@ async function summarizeNews(article) {
         ];
         return await callGeminiAPI(messages, { max_tokens: 100, temperature: 0.5 });
     } catch (error) {
-        console.error('News summarization error:', error.message);
+        console.error('News summarization error, using truncated text:', error.message);
         return article.substring(0, 150) + '...';
     }
 }
@@ -176,11 +203,18 @@ function getSimpleRecommendation(fundamentals, sentimentScore) {
         else if (fundamentals.pbRatio > 5) score -= 1;
     }
     
-    // Sentiment scoring
+    // EPS scoring
+    if (fundamentals.eps) {
+        if (fundamentals.eps > 5) score += 2;
+        else if (fundamentals.eps > 2) score += 1;
+        else if (fundamentals.eps < 0) score -= 2;
+    }
+    
+    // Sentiment scoring (now more weighted)
     if (sentimentScore > 0.5) score += 2;
-    else if (sentimentScore > 0) score += 1;
+    else if (sentimentScore > 0.2) score += 1;
     else if (sentimentScore < -0.5) score -= 2;
-    else if (sentimentScore < 0) score -= 1;
+    else if (sentimentScore < -0.2) score -= 1;
 
     if (score >= 3) return 'BUY';
     if (score <= -2) return 'SELL';
@@ -191,11 +225,16 @@ async function analyzeSentiment(newsArticles) {
     const geminiKey = process.env.GEMINI_API_KEY;
     
     if (!geminiKey || !newsArticles || newsArticles.length === 0) {
-        console.log('No Gemini API key or no news articles, returning neutral sentiment');
-        return 0;
+        console.log('No Gemini API key or no news articles, using fallback sentiment analysis');
+        return analyzeSentimentFallback(newsArticles);
     }
 
     try {
+        const model = await findWorkingModel();
+        if (!model) {
+            return analyzeSentimentFallback(newsArticles);
+        }
+
         const text = newsArticles
             .filter(n => n.title || n.description)
             .map(n => `${n.title || ''}. ${n.description || ''}`)
@@ -231,12 +270,53 @@ Sentiment score:`.trim()
             }
         }
         
-        console.log('Could not parse sentiment score, using fallback');
-        return 0;
+        console.log('Could not parse sentiment score, using fallback analysis');
+        return analyzeSentimentFallback(newsArticles);
     } catch (error) {
-        console.error("Sentiment analysis failed:", error.message);
+        console.error("Sentiment analysis failed, using fallback:", error.message);
+        return analyzeSentimentFallback(newsArticles);
+    }
+}
+
+/**
+ * Fallback sentiment analysis using keyword matching and article sentiment labels
+ */
+function analyzeSentimentFallback(newsArticles) {
+    if (!newsArticles || newsArticles.length === 0) {
         return 0;
     }
+
+    const sentimentMap = {
+        'Positive': 0.7,
+        'Negative': -0.7,
+        'Neutral': 0
+    };
+
+    // If articles have sentiment labels, use those
+    if (newsArticles[0]?.sentiment) {
+        const scores = newsArticles.map(article => sentimentMap[article.sentiment] || 0);
+        const avgScore = scores.reduce((sum, score) => sum + score, 0) / scores.length;
+        return Math.round(avgScore * 100) / 100; // Round to 2 decimal places
+    }
+
+    // Otherwise, use keyword analysis
+    const positiveWords = ['strong', 'growth', 'profit', 'success', 'innovation', 'boost', 'gain', 'rise', 'record', 'exceed', 'positive', 'up'];
+    const negativeWords = ['loss', 'decline', 'fall', 'challenge', 'concern', 'drop', 'fail', 'weak', 'regulatory', 'lawsuit', 'negative', 'down'];
+    
+    let positiveCount = 0;
+    let negativeCount = 0;
+
+    newsArticles.forEach(article => {
+        const text = `${article.title || ''} ${article.description || ''}`.toLowerCase();
+        positiveCount += positiveWords.filter(word => text.includes(word)).length;
+        negativeCount += negativeWords.filter(word => text.includes(word)).length;
+    });
+
+    const total = positiveCount + negativeCount;
+    if (total === 0) return 0;
+
+    const score = (positiveCount - negativeCount) / total;
+    return Math.round(score * 100) / 100; // Round to 2 decimal places
 }
 
 module.exports = {
