@@ -137,12 +137,12 @@ async function fetchNews(symbol, companyName) {
     const apiKey = process.env.NEWSAPI_KEY;
     if (!apiKey) {
       console.log('⚠️ NEWSAPI_KEY not configured, using mock data.');
-      return getMockNews();
+      return { articles: getMockNews(), isMocked: true, mockReason: 'No API key' };
     }
 
     const query = companyName || symbol;
     const url = `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&sortBy=publishedAt&language=en&pageSize=5&apiKey=${apiKey}`;
-    const response = await axios.get(url);
+    const response = await axios.get(url, { timeout: 10000 });
 
     if (response.data.articles?.length > 0) {
       console.log(`✅ Fetched ${response.data.articles.length} news articles for ${query}`);
@@ -160,14 +160,14 @@ async function fetchNews(symbol, companyName) {
           };
         })
       );
-      return processedArticles;
+      return { articles: processedArticles, isMocked: false };
     }
 
     console.log('⚠️ No articles found, using mock data.');
-    return getMockNews();
+    return { articles: getMockNews(), isMocked: true, mockReason: 'No articles found' };
   } catch (error) {
     console.error('❌ Error fetching news:', error.response?.data || error.message);
-    return getMockNews();
+    return { articles: getMockNews(), isMocked: true, mockReason: error.message };
   }
 }
 

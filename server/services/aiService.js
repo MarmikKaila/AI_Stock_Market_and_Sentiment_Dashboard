@@ -124,7 +124,9 @@ async function callGeminiAPI(messages, options = {}) {
 async function generateDetailedRecommendation({ fundamentals, sentimentScore, newsSummary }) {
     try {
         const prompt = `
-Analyze the following stock data and provide a recommendation (BUY, HOLD, or SELL):
+Analyze the following stock data and provide:
+1. A recommendation (BUY, HOLD, or SELL)
+2. A brief 1-2 sentence explanation for your recommendation
 
 Fundamentals:
 - PE Ratio: ${fundamentals.peRatio || 'N/A'}
@@ -136,27 +138,47 @@ Fundamentals:
 Sentiment Score: ${sentimentScore} (range: -1 to 1, where -1 is very negative and 1 is very positive)
 Recent News Summary: ${newsSummary}
 
-Based on this data, provide ONLY ONE WORD as your recommendation: BUY, HOLD, or SELL.
+Respond in this exact format:
+RECOMMENDATION: [BUY/HOLD/SELL]
+EXPLANATION: [Your brief explanation]
         `.trim();
 
         const messages = [
             { 
                 role: 'user', 
-                content: 'You are a stock market analyst. Analyze the data and respond with exactly one word: BUY, HOLD, or SELL.\n\n' + prompt 
+                content: 'You are a stock market analyst. ' + prompt 
             },
         ];
 
-        const recommendation = await callGeminiAPI(messages, { max_tokens: 10, temperature: 0.3 });
-        const upperRec = recommendation.toUpperCase().trim();
-
-        if (upperRec.includes('BUY')) return 'BUY';
-        if (upperRec.includes('HOLD')) return 'HOLD';
-        if (upperRec.includes('SELL')) return 'SELL';
-
-        return getSimpleRecommendation(fundamentals, sentimentScore);
+        const response = await callGeminiAPI(messages, { max_tokens: 150, temperature: 0.3 });
+        
+        // Parse the response
+        const recMatch = response.match(/RECOMMENDATION:\s*(BUY|HOLD|SELL)/i);
+        const expMatch = response.match(/EXPLANATION:\s*(.+)/i);
+        
+        let recommendation = recMatch ? recMatch[1].toUpperCase() : null;
+        let explanation = expMatch ? expMatch[1].trim() : null;
+        
+        // Fallback parsing if format wasn't followed
+        if (!recommendation) {
+            const upperResponse = response.toUpperCase();
+            if (upperResponse.includes('BUY')) recommendation = 'BUY';
+            else if (upperResponse.includes('SELL')) recommendation = 'SELL';
+            else if (upperResponse.includes('HOLD')) recommendation = 'HOLD';
+        }
+        
+        if (!recommendation) {
+            return getSimpleRecommendationWithExplanation(fundamentals, sentimentScore);
+        }
+        
+        if (!explanation) {
+            explanation = getDefaultExplanation(recommendation, fundamentals, sentimentScore);
+        }
+        
+        return { recommendation, explanation };
     } catch (error) {
         console.error('AI Service error, using fallback recommendation:', error.message);
-        return getSimpleRecommendation(fundamentals, sentimentScore);
+        return getSimpleRecommendationWithExplanation(fundamentals, sentimentScore);
     }
 }
 
@@ -219,6 +241,28 @@ function getSimpleRecommendation(fundamentals, sentimentScore) {
     if (score >= 3) return 'BUY';
     if (score <= -2) return 'SELL';
     return 'HOLD';
+}
+
+function getSimpleRecommendationWithExplanation(fundamentals, sentimentScore) {
+    const recommendation = getSimpleRecommendation(fundamentals, sentimentScore);
+    const explanation = getDefaultExplanation(recommendation, fundamentals, sentimentScore);
+    return { recommendation, explanation };
+}
+
+function getDefaultExplanation(recommendation, fundamentals, sentimentScore) {
+    const sentimentText = sentimentScore > 0.2 ? 'positive' : sentimentScore < -0.2 ? 'negative' : 'neutral';
+    const peText = fundamentals.peRatio 
+        ? (fundamentals.peRatio < 20 ? 'attractive valuation' : fundamentals.peRatio > 35 ? 'high valuation' : 'moderate valuation')
+        : 'uncertain valuation';
+    
+    switch (recommendation) {
+        case 'BUY':
+            return `Stock shows ${peText} with ${sentimentText} market sentiment, suggesting potential upside.`;
+        case 'SELL':
+            return `Stock shows ${peText} with ${sentimentText} market sentiment, indicating caution is warranted.`;
+        default:
+            return `Stock shows ${peText} with ${sentimentText} market sentiment. Consider holding current positions.`;
+    }
 }
 
 async function analyzeSentiment(newsArticles) {

@@ -22,16 +22,25 @@ async function getOpinion(req, res) {
       marketCap: stock.marketCap,
     };
 
-    const newsSummary = (stock.news || []).slice(0, 3).map(n => n.title).join(" | ");
+    // Sanitize news summary to prevent prompt injection
+    const newsSummary = (stock.news || [])
+      .slice(0, 3)
+      .map(n => n.title.substring(0, 100).replace(/[{}<>]/g, ''))
+      .join(" | ");
     const sentimentScore = stock.sentimentScore;
 
     const aiResult = await getRecommendation({ fundamentals, sentimentScore, newsSummary });
 
-    // Store recommendation in DB
-    stock.recommendation = aiResult;
+    // Store recommendation and explanation in DB
+    stock.recommendation = aiResult.recommendation;
+    stock.recommendationExplanation = aiResult.explanation;
     await stock.save();
 
-    res.json({ symbol, recommendation: aiResult });
+    res.json({ 
+      symbol, 
+      recommendation: aiResult.recommendation,
+      explanation: aiResult.explanation,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message || "Server error" });

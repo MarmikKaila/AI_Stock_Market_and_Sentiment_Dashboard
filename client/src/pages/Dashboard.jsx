@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { getStockDetails } from '../services/stockService.js';
 import Navbar from '../components/Navbar.jsx';
 import StockCard from '../components/StockCard';
@@ -13,81 +13,190 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 
-// Sample fallback data (in case API graph data is missing)
-const samplePriceData = [
-  { name: 'Mon', price: 148.5 },
-  { name: 'Tue', price: 150.23 },
-  { name: 'Wed', price: 149.8 },
-  { name: 'Thu', price: 151.1 },
-  { name: 'Fri', price: 150.95 },
-  { name: 'Sat', price: 152.3 },
-  { name: 'Sun', price: 151.75 },
+// Fallback data only used when API returns no data
+const getDefaultPriceData = () => [
+  { name: 'Mon', price: 0 },
+  { name: 'Tue', price: 0 },
+  { name: 'Wed', price: 0 },
+  { name: 'Thu', price: 0 },
+  { name: 'Fri', price: 0 },
 ];
 
-const sampleSentimentData = [
-  { day: 'D-4', score: 0.2 },
-  { day: 'D-3', score: -0.1 },
-  { day: 'D-2', score: 0.5 },
-  { day: 'D-1', score: 0.3 },
-  { day: 'Today', score: 0.0 },
+const getDefaultSentimentData = () => [
+  { day: 'D-4', score: 0 },
+  { day: 'D-3', score: 0 },
+  { day: 'D-2', score: 0 },
+  { day: 'D-1', score: 0 },
+  { day: 'Today', score: 0 },
 ];
+
+// Static recommendation styling map (outside component for performance)
+const RECOMMENDATION_CLASSES = {
+  'BUY': 'text-green-400',
+  'SELL': 'text-red-400',
+  'HOLD': 'text-yellow-400',
+};
 
 const Dashboard = () => {
   const [stockDetails, setStockDetails] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [currentSymbol, setCurrentSymbol] = useState('AAPL');
+  
+  // AbortController ref to cancel previous requests
+  const abortControllerRef = useRef(null);
 
-  useEffect(() => {
-    const loadStockData = async () => {
-      if (!currentSymbol) return;
-      try {
-        setIsLoading(true);
-        const data = await getStockDetails(currentSymbol);
+  // Memoized data loading with abort handling
+  const loadStockData = useCallback(async (symbol) => {
+    // Cancel any previous pending request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    
+    // Create new AbortController for this request
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      const data = await getStockDetails(symbol, abortController.signal);
+      
+      // Only update state if this request wasn't aborted
+      if (!abortController.signal.aborted) {
         setStockDetails(data);
         setError(null);
-      } catch (err) {
-        setError(`Failed to fetch data for ${currentSymbol}. Please check the symbol.`);
+      }
+    } catch (err) {
+      // Ignore abort errors - they're intentional when switching symbols
+      if (err.name === 'AbortError') {
+        return;
+      }
+      
+      if (!abortController.signal.aborted) {
+        setError(err.message || `Failed to fetch data for ${symbol}. Please check the symbol.`);
         console.error(err);
-      } finally {
+      }
+    } finally {
+      if (!abortController.signal.aborted) {
         setIsLoading(false);
       }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!currentSymbol) return;
+    loadStockData(currentSymbol);
+    
+    // Cleanup: abort request on unmount or symbol change
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
     };
-    loadStockData();
-  }, [currentSymbol]);
+  }, [currentSymbol, loadStockData]);
 
   const handleSearch = (symbol) => {
-    setCurrentSymbol(symbol.toUpperCase());
+    const cleanSymbol = symbol.trim().toUpperCase();
+    if (cleanSymbol && cleanSymbol !== currentSymbol) {
+      setCurrentSymbol(cleanSymbol);
+    }
+  };
+
+  const handleRetry = () => {
+    loadStockData(currentSymbol);
   };
 
   const getRecommendationClass = (recommendation) => {
-    switch (recommendation) {
-      case 'BUY':
-        return 'text-green-400';
-      case 'SELL':
-        return 'text-red-400';
-      case 'HOLD':
-        return 'text-yellow-400';
-      default:
-        return 'text-gray-300';
-    }
+    return RECOMMENDATION_CLASSES[recommendation] || 'text-gray-300';
   };
+
+  // Get real chart data from API response, with fallback
+  const getPriceData = () => {
+    if (stockDetails?.stock?.priceHistory?.length > 0) {
+      return stockDetails.stock.priceHistory;
+    }
+    return getDefaultPriceData();
+  };
+
+  const getSentimentData = () => {
+    if (stockDetails?.stock?.sentimentHistory?.length > 0) {
+      return stockDetails.stock.sentimentHistory;
+    }
+    return getDefaultSentimentData();
+  };
+
+  // Check if data is mocked
+  const isMockedData = stockDetails?.stock?.isMocked;
+  const mockStatus = stockDetails?.stock?.mockStatus;
 
   return (
     <div className="bg-black min-h-screen animate-fadeIn">
       <Navbar onSearch={handleSearch} />
 
       {isLoading ? (
-        <div className="text-center text-white p-10 animate-pulse">
-          Loading data for {currentSymbol}...
+        <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-6 text-white">
+          {/* Loading Skeleton */}
+          <div className="col-span-1 space-y-4">
+            <div className="h-12 bg-gray-800 rounded animate-pulse" />
+            <div className="h-24 bg-gray-800 rounded animate-pulse" />
+            <div className="h-24 bg-gray-800 rounded animate-pulse" />
+            <div className="h-24 bg-gray-800 rounded animate-pulse" />
+          </div>
+          <div className="col-span-1 space-y-4">
+            <div className="h-64 bg-gray-800 rounded animate-pulse" />
+            <div className="h-48 bg-gray-800 rounded animate-pulse" />
+          </div>
+          <div className="col-span-1 space-y-4">
+            <div className="h-48 bg-gray-800 rounded animate-pulse" />
+            <div className="h-32 bg-gray-800 rounded animate-pulse" />
+          </div>
         </div>
       ) : error ? (
-        <div className="text-center text-red-500 p-10">{error}</div>
+        <div className="text-center p-10">
+          <p className="text-red-500 text-lg mb-4">{error}</p>
+          <button
+            onClick={handleRetry}
+            className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
       ) : (
         <div className="p-6 grid grid-cols-1 lg:grid-cols-3 gap-6 text-white transition-all duration-500 ease-in-out">
+          {/* Mock Data Warning Banner */}
+          {isMockedData && (
+            <div className="col-span-full bg-yellow-900/30 border border-yellow-600/50 rounded-lg p-3 mb-2">
+              <p className="text-yellow-400 text-sm flex items-center gap-2">
+                <span className="text-lg">⚠️</span>
+                <span>
+                  <strong>Demo Mode:</strong> Some data is simulated. 
+                  {mockStatus?.fundamentals && ' Fundamentals'} 
+                  {mockStatus?.price && ' Price'} 
+                  {mockStatus?.news && ' News'} 
+                  {mockStatus?.priceHistory && ' Chart'} 
+                  {' '}may not reflect real market data.
+                </span>
+              </p>
+            </div>
+          )}
+
+          {/* Cache indicator */}
+          {stockDetails?.fromCache && (
+            <div className="col-span-full text-gray-500 text-xs text-right -mt-4 mb-2">
+              Data from cache • Updated: {new Date(stockDetails.stock.lastFetchedAt).toLocaleTimeString()}
+            </div>
+          )}
+
           {/* Left Section - Stock Info */}
           <div className="col-span-1 space-y-4">
-            <h1 className="text-4xl font-bold mb-4">{stockDetails.stock.symbol}</h1>
+            <div className="flex items-baseline gap-3">
+              <h1 className="text-4xl font-bold">{stockDetails.stock.symbol}</h1>
+              {stockDetails.stock.name && (
+                <span className="text-gray-400 text-sm">{stockDetails.stock.name}</span>
+              )}
+            </div>
 
             {/* Each StockCard now interactive */}
             <div className="transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-emerald-500/20">
@@ -122,18 +231,30 @@ const Dashboard = () => {
                 }
               />
             </div>
+
+            <div className="transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-emerald-500/20">
+              <StockCard
+                title="EPS"
+                value={
+                  stockDetails.stock.eps
+                    ? `$${stockDetails.stock.eps.toFixed(2)}`
+                    : 'N/A'
+                }
+              />
+            </div>
           </div>
 
           {/* Center Section - Chart + News */}
           <div className="col-span-1 space-y-4">
-            {/* Animated Chart */}
+            {/* Price Chart with Real Data */}
             <div className="bg-gray-900 p-6 rounded-xl h-64 shadow-md transition-all duration-500 hover:shadow-emerald-400/20 hover:-translate-y-1">
               <h3 className="text-gray-300 text-sm mb-2 font-semibold">
                 Price Trend (7 Days)
+                {mockStatus?.priceHistory && <span className="text-yellow-500 text-xs ml-2">(simulated)</span>}
               </h3>
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart
-                  data={samplePriceData}
+                  data={getPriceData()}
                   margin={{ top: 15, right: 30, left: 10, bottom: 10 }}
                 >
                   <defs>
@@ -171,6 +292,7 @@ const Dashboard = () => {
                       fontSize: '13px',
                     }}
                     labelStyle={{ color: '#6EE7B7' }}
+                    formatter={(value) => [`$${Number(value).toFixed(2)}`, 'Price']}
                   />
                   <Line
                     type="monotone"
@@ -193,23 +315,30 @@ const Dashboard = () => {
 
             {/* News Section */}
             <div className="bg-gray-900 p-6 rounded-xl transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:shadow-emerald-500/10">
-              <h3 className="text-lg font-bold mb-3">Latest News & Sentiment</h3>
-              {stockDetails.stock.news.map((item, index) => (
-                <div
-                  key={index}
-                  className="flex items-center justify-between mb-2 border-b border-gray-800 pb-2 transition-all duration-200 hover:scale-[1.01]"
-                >
-                  <a
-                    href={item.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="truncate pr-4 hover:underline text-blue-400"
+              <h3 className="text-lg font-bold mb-3">
+                Latest News & Sentiment
+                {mockStatus?.news && <span className="text-yellow-500 text-xs ml-2">(demo)</span>}
+              </h3>
+              {stockDetails.stock.news && stockDetails.stock.news.length > 0 ? (
+                stockDetails.stock.news.map((item, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center justify-between mb-2 border-b border-gray-800 pb-2 transition-all duration-200 hover:scale-[1.01]"
                   >
-                    {item.title}
-                  </a>
-                  <SentimentBadge sentiment={item.sentiment} />
-                </div>
-              ))}
+                    <a
+                      href={item.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="truncate pr-4 hover:underline text-blue-400"
+                    >
+                      {item.title}
+                    </a>
+                    <SentimentBadge sentiment={item.sentiment} />
+                  </div>
+                ))
+              ) : (
+                <p className="text-gray-500">No news available</p>
+              )}
             </div>
           </div>
 
@@ -218,17 +347,18 @@ const Dashboard = () => {
             <div className="bg-gray-900 p-6 rounded-xl h-48 flex flex-col transition-all duration-300 hover:-translate-y-1 hover:shadow-amber-400/20">
               <h3 className="text-lg font-bold">Sentiment Score</h3>
               <p className="text-2xl font-bold text-amber-400">
-                {stockDetails.stock.sentimentScore.toFixed(2)}
+                {stockDetails.stock.sentimentScore?.toFixed(2) ?? '0.00'}
               </p>
               <div className="flex-grow mt-2">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={sampleSentimentData}>
+                  <LineChart data={getSentimentData()}>
                     <Tooltip
                       contentStyle={{
                         backgroundColor: '#1F2937',
                         border: 'none',
                         borderRadius: '0.5rem',
                       }}
+                      formatter={(value) => [Number(value).toFixed(2), 'Score']}
                     />
                     <Line
                       type="monotone"
@@ -251,10 +381,11 @@ const Dashboard = () => {
                   stockDetails.opinion.recommendation
                 )} animate-pulse`}
               >
-                {stockDetails.opinion.recommendation}
+                {stockDetails.opinion.recommendation || 'N/A'}
               </p>
               <p className="text-gray-300 mt-2 text-sm">
-                Strong fundamentals and positive market sentiment indicate a buying opportunity.
+                {stockDetails.opinion.explanation || 
+                  'Analysis pending. Please wait for AI recommendation.'}
               </p>
             </div>
           </div>
