@@ -94,9 +94,13 @@ async function fetchPriceHistory(symbol, days = 7) {
 
     const dates = Object.keys(timeSeries).slice(0, days).reverse();
     const priceHistory = dates.map(date => ({
-      name: new Date(date).toLocaleDateString('en-US', { weekday: 'short' }),
+      name: new Date(date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
       date: date,
       price: parseFloat(timeSeries[date]['4. close']),
+      open: parseFloat(timeSeries[date]['1. open']),
+      high: parseFloat(timeSeries[date]['2. high']),
+      low: parseFloat(timeSeries[date]['3. low']),
+      volume: parseInt(timeSeries[date]['5. volume'], 10) || 0,
     }));
 
     return { data: priceHistory, isMocked: false };
@@ -107,17 +111,22 @@ async function fetchPriceHistory(symbol, days = 7) {
 }
 
 function generateMockPriceHistory(days) {
-  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const basePrice = 100 + Math.random() * 100;
   const history = [];
   
   for (let i = days - 1; i >= 0; i--) {
     const date = new Date();
     date.setDate(date.getDate() - i);
+    const close = basePrice + (Math.random() - 0.5) * 20;
+    const open = close + (Math.random() - 0.5) * 5;
     history.push({
-      name: dayNames[date.getDay()],
+      name: date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
       date: date.toISOString().split('T')[0],
-      price: basePrice + (Math.random() - 0.5) * 20,
+      price: close,
+      open,
+      high: Math.max(open, close) + Math.random() * 3,
+      low: Math.min(open, close) - Math.random() * 3,
+      volume: Math.floor(5000000 + Math.random() * 10000000),
     });
   }
   

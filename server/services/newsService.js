@@ -1,11 +1,11 @@
 const axios = require('axios');
 
-// Try multiple Gemini models in order of preference (2025 working list)
+// Try multiple Gemini models in order of preference
 const GEMINI_MODELS = [
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-lite',
   'gemini-1.5-flash',
-  'gemini-1.5-flash-latest',
-  'gemini-1.5-pro-latest',
-  'gemini-pro'
+  'gemini-1.5-pro'
 ];
 
 let workingModel = null;
@@ -34,7 +34,7 @@ async function findWorkingModel() {
 
   for (const model of GEMINI_MODELS) {
     try {
-      const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${geminiKey}`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
       const response = await axios.post(
         url,
         {
@@ -101,7 +101,7 @@ async function analyzeSentiment(text) {
       return analyzeSentimentFallback(text);
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1/models/${model}:generateContent?key=${geminiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
     const prompt = `Analyze the sentiment of this news headline. Respond with only one word: Positive, Negative, or Neutral.\n\nHeadline: "${text}"`;
 
     const response = await axios.post(

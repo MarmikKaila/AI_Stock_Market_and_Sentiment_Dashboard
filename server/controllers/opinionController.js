@@ -1,13 +1,24 @@
 // server/controllers/opinionController.js
 const Stock = require("../models/Stock");
+const { isDbConnected } = require("../config/db");
 const { getRecommendation } = require("../services/aiService");
 
 async function getOpinion(req, res) {
   try {
     const symbol = req.params.symbol.toUpperCase();
 
+    if (!isDbConnected()) {
+      return res.status(503).json({ error: "Database not available. Please try again later." });
+    }
+
     // Ensure we have stock data in DB (fetch if missing)
-    let stock = await Stock.findOne({ symbol });
+    let stock;
+    try {
+      stock = await Stock.findOne({ symbol });
+    } catch (dbErr) {
+      console.error("DB query failed:", dbErr.message);
+      return res.status(503).json({ error: "Database query failed." });
+    }
     if (!stock) {
       // If not found, call the stock endpoint logic (reuse controller)
       // simple approach: return 404 and user should first call /api/stocks/:symbol

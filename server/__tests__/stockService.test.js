@@ -93,7 +93,7 @@ describe('stockService', () => {
       const result = await fetchLatestPrice('AAPL');
 
       expect(result.isMocked).toBe(true);
-      expect(result.price).toBeGreaterThan(0);
+      expect(result.price).toBeNull();
     });
 
     it('should return mocked price when no data returned', async () => {

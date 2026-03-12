@@ -147,4 +147,112 @@ function generateSentimentHistory(newsItems) {
   }));
 }
 
-module.exports = { getStock };
+module.exports = { getStock, getMarketOverview, getPriceHistory };
+
+const RANGE_MAP = { '7d': 7, '30d': 30, '90d': 90 };
+
+async function getPriceHistory(req, res) {
+  try {
+    const symbol = req.params.symbol.toUpperCase();
+    const range = req.query.range || '7d';
+    const days = RANGE_MAP[range] || 7;
+
+    const result = await fetchPriceHistory(symbol, days);
+    return res.json({
+      symbol,
+      range,
+      days,
+      data: result.data,
+      isMocked: result.isMocked,
+    });
+  } catch (err) {
+    console.error('Price history error:', err);
+    res.status(500).json({ error: 'Failed to fetch price history' });
+  }
+}
+
+const POPULAR_SYMBOLS = ['AAPL', 'GOOGL', 'MSFT', 'AMZN', 'TSLA'];
+
+async function getMarketOverview(req, res) {
+  try {
+    const dbConnected = isDbConnected();
+    const stocks = [];
+
+    for (const symbol of POPULAR_SYMBOLS) {
+      try {
+        // Try cache first
+        if (dbConnected) {
+          const cache = await Stock.findOne({ symbol });
+          const THIRTY_MIN = 1000 * 60 * 30;
+          const lastFetched = cache?.lastFetchedAt ? new Date(cache.lastFetchedAt).getTime() : 0;
+          if (cache && (Date.now() - lastFetched) < THIRTY_MIN) {
+            stocks.push(cache);
+            continue;
+          }
+        }
+
+        // Fetch fresh — fundamentals + price history (with delay between stocks)
+        if (stocks.length > 0) {
+          await new Promise(r => setTimeout(r, 1500));
+        }
+        const fundamentals = await fetchFundamentalsAlpha(symbol);
+        await new Promise(r => setTimeout(r, 1500));
+        const priceHistoryResult = await fetchPriceHistory(symbol, 7);
+
+        let finalPrice = null;
+        if (priceHistoryResult.data?.length > 0 && !priceHistoryResult.isMocked) {
+          finalPrice = priceHistoryResult.data[priceHistoryResult.data.length - 1].price;
+        }
+
+        const newsResult = await fetchNews(symbol, fundamentals.name);
+        const sentimentScore = computeSentimentScore(newsResult.articles);
+
+        const stockData = {
+          symbol,
+          name: fundamentals.name,
+          price: finalPrice,
+          peRatio: fundamentals.peRatio,
+          pbRatio: fundamentals.pbRatio,
+          eps: fundamentals.eps,
+          marketCap: fundamentals.marketCap,
+          news: newsResult.articles,
+          sentimentScore,
+          sentimentHistory: generateSentimentHistory(newsResult.articles),
+          priceHistory: priceHistoryResult.data,
+          lastFetchedAt: new Date(),
+          isMocked: fundamentals.isMocked || priceHistoryResult.isMocked || newsResult.isMocked,
+          mockStatus: {
+            fundamentals: fundamentals.isMocked || false,
+            price: !finalPrice,
+            priceHistory: priceHistoryResult.isMocked || false,
+            news: newsResult.isMocked || false,
+          },
+        };
+
+        // Cache in DB if connected
+        if (dbConnected) {
+          try {
+            const doc = await Stock.findOneAndUpdate(
+              { symbol },
+              stockData,
+              { upsert: true, new: true, setDefaultsOnInsert: true }
+            );
+            stocks.push(doc);
+          } catch (dbErr) {
+            stocks.push(stockData);
+          }
+        } else {
+          stocks.push(stockData);
+        }
+      } catch (symbolErr) {
+        console.warn(`Failed to fetch ${symbol}:`, symbolErr.message);
+        stocks.push({ symbol, name: symbol, price: null, error: true });
+      }
+    }
+
+    res.json({ stocks });
+  } catch (err) {
+    console.error('Market overview error:', err);
+    res.status(500).json({ error: 'Failed to load market overview' });
+  }
+}
