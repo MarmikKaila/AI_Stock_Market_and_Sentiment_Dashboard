@@ -1,49 +1,528 @@
-# AI Stock Market and Sentiment Dashboard
+# 📊 AI Stock Market and Sentiment Dashboard
 
-Production-style full-stack fintech application that combines market data, news sentiment, and AI-generated recommendations. The platform is designed around clear backend boundaries, resilient fallbacks, and a multi-page frontend experience.
+> A production-grade **full-stack fintech application** that delivers real-time stock analysis, AI-powered sentiment evaluation, and intelligent buy/sell/hold recommendations powered by Google Gemini.
 
-Repository: https://github.com/MarmikKaila/AI_Stock_Market_and_Sentiment_Dashboard.git
+**Repository:** https://github.com/MarmikKaila/AI_Stock_Market_and_Sentiment_Dashboard.git
 
-## What This Project Delivers
+---
 
-- Market overview for major tickers with cached data strategy
-- Deep stock detail pages with fundamentals, history, sentiment, and recommendation
-- Persistent watchlist backed by MongoDB and client session identity
-- Side-by-side stock comparison workflow
-- AI-assisted recommendation and summarization with fallback logic when model or quota is unavailable
-- Security hardening: CORS controls, helmet, request validation, and rate limiting
+## 🎯 What Problem Does This Solve?
 
-## System Architecture
+Investors today face an overload of market data. Without intelligent contextualization, it's hard to make confident decisions.
+
+**This dashboard solves it by:**
+- ✅ Pulling real stock fundamentals from Alpha Vantage
+- ✅ Analyzing market sentiment from live news via NewsAPI  
+- ✅ Generating AI-powered investment recommendations using Gemini
+- ✅ Caching results to minimize API calls and costs
+- ✅ Providing a persistent watchlist for personal tracking
+- ✅ Allowing side-by-side stock comparisons
+
+---
+
+## 📹 Product Walkthrough (Video Demo)
+
+[▶️ **WATCH DEMO VIDEO**](https://drive.google.com/file/d/13IK9walcuvg2VHGvFdtoI_qaeRcHtXdw/view?usp=sharing)
+
+
+
+*In this video, watch:*
+- Market overview page showing top 5 stocks
+- Clicking into a stock detail page and seeing fundamentals + sentiment
+- Adding/removing stocks from watchlist
+- Comparing two stocks side-by-side
+- Enhanced price chart with time range selector
+
+---
+
+## 🏗️ System Architecture Overview
+
+### How the pieces fit together:
+
+```
+┌─────────────────┐
+│   React SPA     │  (Client: React 19, Vite, React Router)
+│   Home          │  Pages: Home, StockDetail, Watchlist, Compare
+│   Detail        │
+│   Watchlist     │
+└────────┬────────┘
+         │ HTTP/JSON
+         ↓
+┌──────────────────────┐
+│   Express Server     │  (Backend: Node.js + Express)
+│   /api/stocks        │  
+│   /api/opinion       │  Routes: Stock, Opinion, AI, Watchlist
+│   /api/watchlist     │
+└────────┬─────────────┘
+         │
+    ┌────┴─────┬──────────┬──────────┐
+    ↓          ↓          ↓          ↓
+MongoDB    Alpha Vantage NewsAPI   Gemini API
+ (Cache)   (Prices +     (News)    (AI Models)
+          Fundamentals)
+```
+
+---
+
+## 🖥️ Frontend Architecture (React SPA)
+
+### Pages and their responsibilities:
+
+| Page | What It Does | Key Features |
+|---|---|---|
+| **Home** `/` | Market overview showing top 5 stocks | Summary cards, quick actions, watchlist toggles |
+| **Stock Detail** `/stock/:symbol` | Deep dive into one stock | Charts, fundamentals, sentiment, AI recommendation, news |
+| **Watchlist** `/watchlist` | Persistent user-saved stocks | MongoDB-backed, session-based identity |
+| **Compare** `/compare` | Side-by-side stock analysis | Color-coded metric comparison, overlaid charts |
+| **Not Found** `/*` | 404 fallback | Friendly error page |
+
+### Frontend tech stack:
+
+```
+React 19 (Component framework)
+├─ React Router 7 (Multi-page routing)
+├─ Context API (Watchlist state + optimistic updates)
+├─ Recharts (Price/sentiment charts)
+├─ Tailwind CSS 4 (Styling + responsiveness)
+└─ Vitest + RTL (Unit/component testing)
+```
+
+---
+
+## ⚙️ Backend Architecture (Express API)
+
+### What the backend does:
+
+1. **Validates** incoming requests (symbol format, session ID, etc.)
+2. **Fetches** from external APIs (Alpha Vantage, NewsAPI, Gemini)
+3. **Composes** data into unified payloads
+4. **Caches** results in MongoDB to reduce API calls
+5. **Falls back gracefully** if external services fail
+
+---
+
+## 📡 API Endpoints (What Gets Called)
+
+### Stock endpoints
+
+```http
+GET /api/stocks/market/overview
+→ Returns top 5 stocks with cached data
+
+GET /api/stocks/:symbol
+→ Returns full stock analysis (fundamentals, price, news, sentiment, recommendation)
+
+GET /api/stocks/:symbol/history?range=7d|30d|90d
+→ Returns historical price data for charting
+```
+
+### Opinion (AI Recommendation) endpoint
+
+```http
+GET /api/opinion/:symbol
+→ Returns AI recommendation: BUY, HOLD, or SELL with explanation
+```
+
+### Watchlist endpoints
+
+```http
+GET /api/watchlist/:sessionId
+→ Returns list of symbols + full stock data
+
+POST /api/watchlist/:sessionId/add
+Body: { "symbol": "AAPL" }
+→ Adds stock to watchlist (max 20)
+
+DELETE /api/watchlist/:sessionId/:symbol
+→ Removes stock from watchlist
+```
+
+---
+
+## 🔄 How Data Flows Through the System
+
+### Flow 1: User searches for a stock (Stock Detail Page)
+
+```
+1. User types "AAPL" in search bar
+   ↓
+2. React Router navigates to /stock/AAPL
+   ↓
+3. StockDetail component mounts, calls getStockDetails("AAPL")
+   ↓
+4. Frontend sends TWO parallel requests:
+   └─→ GET /api/stocks/AAPL
+   └─→ GET /api/opinion/AAPL
+   ↓
+5. Backend receives /api/stocks/AAPL:
+   ├─ Check MongoDB cache (is it fresh?)
+   ├─ If YES → return cached data
+   ├─ If NO → fetch from external APIs:
+   │   ├─ Alpha Vantage for fundamentals + prices
+   │   ├─ NewsAPI for 5 latest headlines
+   │   └─ For each headline, call Gemini to classify sentiment
+   ├─ Aggregate sentiment score (-1 to +1)
+   └─ Save to MongoDB (cache) and return
+   ↓
+6. Backend receives /api/opinion/AAPL:
+   ├─ Analyze fundamentals + sentiment
+   └─ Call Gemini to generate BUY/HOLD/SELL recommendation
+   ↓
+7. Frontend receives both payloads:
+   ├─ Render fundamentals in cards
+   ├─ Render enhanced price chart (with vol bars, time range selector)
+   ├─ Render sentiment gauge (SVG dial showing -1 to +1)
+   ├─ Render AI recommendation (styled with color: green=BUY, yellow=HOLD, red=SELL)
+   └─ Render news feed with sentiment badges
+```
+
+### Flow 2: User adds stock to watchlist
+
+```
+1. User clicks ★ star on a stock card
+   ↓
+2. useWatchlist().addStock("AAPL") is called
+   ↓
+3. UI updates OPTIMISTICALLY (star immediately fills yellow)
+   ↓
+4. POST /api/watchlist/:sessionId/add sent to backend
+   ├─ Backend validates sessionId format
+   ├─ Checks if stock already in list
+   ├─ Ensures list doesn't exceed 20 symbols
+   └─ Saves to MongoDB
+   ↓
+5. Response received:
+   ├─ If SUCCESS → keep optimistic update
+   └─ If FAILED → revert star to empty ☆ and fetch fresh watchlist
+```
+
+### Flow 3: Market overview loads
+
+```
+1. User visits home page /
+   ↓
+2. Home component calls GET /api/stocks/market/overview
+   ↓
+3. Backend loops SEQUENTIALLY over [AAPL, GOOGL, MSFT, AMZN, TSLA]:
+   ├─ 1.5 second delay between calls (respect API rate limits)
+   ├─ Check MongoDB cache first
+   ├─ If stale, fetch fresh data with delays
+   └─ Compose lightweight response (symbol, price, sentiment, %change)
+   ↓
+4. Frontend receives 5 stock summaries
+   ↓
+5. Render grid of StockSummaryCard components
+   └─ Each card shows: symbol, name, price, %change, mini sparkline, sentiment
+```
+
+---
+
+## 📹 Deep Dive Videos (Space for attachments)
+
+### Video 1: Frontend walkthrough
+
+**[INSERT VIDEO: Tour of React pages and components]**
+
+*Topics covered:*
+- How React Router navigates between pages
+- StockDetail page and all its sections
+- EnhancedPriceChart interaction (time range selector)
+- SentimentGauge component rendering
+- Watchlist context managing add/remove state
+
+---
+
+### Video 2: Backend data flow
+
+**[INSERT VIDEO: API calls and database interactions]**
+
+*Topics covered:*
+- getStock() fetching from Alpha Vantage + NewsAPI
+- Gemini sentiment classification logic
+- MongoDB caching strategy
+- Error handling and fallback behavior
+- Rate limiting and CORS security
+
+---
+
+### Video 3: Stock comparison workflow
+
+**[INSERT VIDEO: Comparing two stocks]**
+
+*Topics covered:*
+- How Compare page fetches both stocks in parallel
+- Color-coded metric comparison (green = better)
+- Side-by-side chart rendering
+- Query param syncing with URL
+
+---
+
+## 🔑 Environment Variables and API Keys
+
+### What each key is used for:
+
+| Key | Required | Purpose | Source |
+|---|---|---|---|
+| **MONGO_URI** | YES | MongoDB Atlas connection string | https://cloud.mongodb.com |
+| **GEMINI_API_KEY** | YES | Google Gemini AI for sentiment/recommendations | https://aistudio.google.com/app/apikey |
+| **ALPHA_VANTAGE_API_KEY** | Recommended | Stock prices, fundamentals, historical data | https://www.alphavantage.co/support/#api-key |
+| **NEWSAPI_KEY** | Recommended | Latest financial news headlines | https://newsapi.org/register |
+| **COHERE_API_KEY** | Optional | Reserved for future AI model strategy | https://dashboard.cohere.com/api-keys |
+| **PORT** | No | Server port (default 5000) | Custom |
+| **CORS_ORIGINS** | No | Allowed frontend origins | Custom |
+
+### Example .env file (with safe placeholders):
+
+```env
+# Database
+PORT=5000
+MONGO_URI=mongodb+srv://<username>:<password>@<cluster>.mongodb.net/?retryWrites=true&w=majority
+
+# External APIs
+ALPHA_VANTAGE_API_KEY=your_alpha_vantage_key_here
+NEWSAPI_KEY=your_newsapi_key_here
+GEMINI_API_KEY=your_gemini_api_key_here
+COHERE_API_KEY=your_cohere_api_key_here
+
+# CORS (optional)
+CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+```
+
+⚠️ **Critical Security Notes:**
+- Never commit .env with real keys
+- Rotate immediately if leaked
+- Use per-environment keys (dev/prod) with restricted quotas
+- Keep .env.example with only placeholders
+
+---
+
+## 🚀 Getting Started
+
+### 1) Clone and install
+
+```bash
+git clone https://github.com/MarmikKaila/AI_Stock_Market_and_Sentiment_Dashboard.git
+cd AI_StockMarketSummary_SentimentDashbord
+
+# Backend
+cd server && npm install
+cd ../client && npm install
+```
+
+### 2) Set up environment
+
+```bash
+cd server
+cp .env.example .env
+# Edit .env with your API keys and MongoDB URI
+```
+
+### 3) Start backend
+
+```bash
+cd server
+npm run dev
+# Server runs on http://localhost:5000
+```
+
+### 4) Start frontend (new terminal)
+
+```bash
+cd client
+npm run dev
+# Frontend runs on http://localhost:5173
+```
+
+### 5) Open in browser
+
+👉 **http://localhost:5173**
+
+---
+
+## 📊 Tech Stack (Complete Reference)
 
 ### Frontend
-
-- Runtime: React 19 + Vite
-- Routing: React Router multi-page SPA
-- Visualization: Recharts
-- Styling: Tailwind CSS
-- State: React Context for watchlist state and optimistic updates
+- **React 19** — Component framework
+- **Vite 7** — Build tool and dev server
+- **React Router 7** — URL-based multi-page navigation
+- **Recharts** — Data visualization for charts
+- **Tailwind CSS 4** — Utility-first styling
+- **Vitest** — Unit/component test runner
+- **React Testing Library** — Component testing utilities
 
 ### Backend
+- **Node.js** — JavaScript runtime
+- **Express 4** — HTTP server and routing framework
+- **Mongoose 8** — MongoDB object modeling
+- **MongoDB Atlas** — Cloud database
+- **Axios** — HTTP client for external APIs
+- **helmet** — Security headers middleware
+- **express-validator** — Input validation at route level
+- **express-rate-limit** — Abuse prevention via request throttling
+- **Jest 30** — Server-side unit testing
+- **Supertest** — HTTP assertion library for API testing
 
-- Runtime: Node.js + Express
-- Data: MongoDB + Mongoose
-- External providers:
-  - Alpha Vantage for market data and historical prices
-  - NewsAPI for financial headlines
-  - Gemini API for sentiment/recommendation tasks
-- Reliability patterns:
-  - Graceful degradation to mock/fallback behavior
-  - DB availability checks before cache-dependent operations
-  - Route-level and payload-level request validation
+### External APIs
+- **Alpha Vantage** — Stock prices, fundamentals, historical data
+- **NewsAPI** — Financial news headlines
+- **Google Gemini** — AI-powered sentiment analysis and recommendations
 
-## Complete Folder Structure
+---
+
+## 🧪 Running Tests
+
+### Backend tests
+
+```bash
+cd server
+npm test              # Run all tests once
+npm run test:watch   # Watch mode
+npm run test:coverage # Coverage report
+```
+
+### Frontend tests
+
+```bash
+cd client
+npm test              # Run all tests once
+npm run test:coverage # Coverage report
+```
+
+---
+
+## 🛡️ Security Features
+
+This project includes production-grade security hardening:
+
+✅ **Helmet** — HTTP security headers (XSS, clickjacking, etc.)  
+✅ **CORS** — Strict origin allow-list with explicit methods (GET, POST, DELETE)  
+✅ **Rate Limiting** — Global limit (100 req/15min) + AI endpoint limit (20 req/15min)  
+✅ **Input Validation** — express-validator at every route boundary  
+✅ **Body Size Limits** — 10KB max JSON/urlencoded to prevent abuse  
+✅ **Environment Validation** — Fail-fast on missing required config  
+
+---
+
+## 📚 How Everything Works (Architecture Deep Dive)
+
+### Startup sequence (what happens when server.js runs):
+
+```
+1. Load environment variables from .env
+2. Validate required vars (MONGO_URI, GEMINI_API_KEY)
+3. Attempt MongoDB connection; log success/failure
+4. Register security middleware (helmet, CORS, rate-limit)
+5. Register request parsing middleware (json, urlencoded)
+6. Mount API route handlers
+7. Start listening on PORT
+```
+
+### Stock fetch pipeline (when /api/stocks/:symbol is called):
+
+```
+1. Validate symbol format (letters only, 1-5 length)
+2. Check MongoDB cache:
+   ├─ If EXISTS and age < 30min → return cached data
+   └─ If MISSING or STALE → proceed to step 3
+3. Fetch fundamentals from Alpha Vantage OVERVIEW endpoint
+4. Wait 1.5 seconds (respect rate limits)
+5. Fetch price history from Alpha Vantage TIME_SERIES_DAILY endpoint
+6. Wait 1.5 seconds
+7. Fetch news from NewsAPI for this company/symbol
+8. For each headline:
+   ├─ Send to Gemini to classify: Positive, Negative, or Neutral
+   └─ Collect responses
+9. Compute average sentiment score (range -1 to +1)
+10. Compile response object with:
+    ├─ Fundamentals (P/E, P/B, EPS, Market Cap)
+    ├─ Price + price history
+    ├─ News list with individual sentiment tags
+    ├─ Aggregated sentiment score
+    └─ Metadata (isMocked, lastFetchedAt)
+11. Save to MongoDB cache
+12. Return JSON to frontend
+```
+
+### Gemini model selection logic:
+
+```
+First request to Gemini:
+├─ Try gemini-2.0-flash (newest)
+├─ Try gemini-2.0-flash-lite
+├─ Try gemini-1.5-flash (stable)
+└─ Try gemini-1.5-pro (fallback)
+
+If all fail:
+└─ Use keyword-based sentiment fallback
+    └─ Count positive/negative words in headline
+    └─ Return Positive, Negative, or Neutral
+```
+
+### Watchlist sync pattern (optimistic updates):
+
+```
+User clicks ★ to add stock:
+1. Frontend instantly fills star (yellow) — OPTIMISTIC
+2. Frontend sends POST to backend
+3. Backend processes add request
+4. If SUCCESS:
+   └─ Keep UI in optimistic state ✅
+5. If FAILURE (e.g., limit reached):
+   └─ Revert star to empty ☆
+   └─ Fetch fresh watchlist from server to restore truth state
+```
+
+---
+
+## 📈 Performance and Caching
+
+- **Market overview** caches for 30 minutes to reduce API calls
+- **Stock details** cached per symbol with freshness check
+- **Watchlist** loads instantly from MongoDB
+- **Price history** supports 7d, 30d, 90d queries (via time range reducer)
+- **Rate limiting** protects paid-tier APIs from runaway requests
+
+---
+
+## 🔧 Troubleshooting
+
+### Gemini quota exceeded
+→ Free tier exhausted. Wait 24h or get new API key from https://aistudio.google.com
+
+### MongoDB connection fails
+→ Check MONGO_URI in .env. Verify IP whitelist in MongoDB Atlas.
+
+### Alpha Vantage returns "API limit reached"
+→ Free tier: 5 calls/minute. Pro plan: 500/minute. Add delays or upgrade.
+
+### CORS error when adding to watchlist
+→ This was a bug (DELETE method not allowed). Already fixed in server.js.
+
+---
+
+## 🎓 Learning outcomes from this project
+
+- Full-stack JavaScript (React + Node.js)
+- API design and REST principles
+- Database modeling (relational vs document-based)
+- External API integration and error handling
+- Security hardening (helmet, CORS, validation, rate limiting)
+- Caching strategies and cache invalidation
+- Testing strategy (unit + integration + API)
+- Optimistic UI patterns for better UX
+- Production-grade error handling and fallbacks
+
+---
+
+## 📚 Complete Folder Tree
 
 ```text
 AI_StockMarketSummary_SentimentDashbord/
-├─ README.md
-├─ package.json
+├─ README.md                              # This file
+├─ package.json                           # Workspace root
 ├─ theory.txt
-├─ client/
+├─
+├─ client/                                # Frontend (React + Vite)
 │  ├─ package.json
 │  ├─ package-lock.json
 │  ├─ index.html
@@ -84,431 +563,66 @@ AI_StockMarketSummary_SentimentDashbord/
 │     └─ __tests__/
 │        ├─ components/
 │        └─ services/
-└─ server/
-  ├─ package.json
-  ├─ package-lock.json
-  ├─ server.js
-  ├─ .env.example
-  ├─ config/
-  │  ├─ db.js
-  │  └─ validateEnv.js
-  ├─ models/
-  │  ├─ Stock.js
-  │  └─ Watchlist.js
-  ├─ controllers/
-  │  ├─ stockController.js
-  │  ├─ opinionController.js
-  │  └─ watchlistController.js
-  ├─ routes/
-  │  ├─ stockRoutes.js
-  │  ├─ opinionRoutes.js
-  │  ├─ aiRoutes.js
-  │  └─ watchlistRoutes.js
-  ├─ services/
-  │  ├─ stockService.js
-  │  ├─ newsService.js
-  │  └─ aiService.js
-  └─ __tests__/
-    ├─ aiService.test.js
-    ├─ newsService.test.js
-    └─ stockService.test.js
+│
+└─ server/                                # Backend (Node + Express)
+   ├─ package.json
+   ├─ package-lock.json
+   ├─ server.js
+   ├─ .env.example
+   ├─ config/
+   │  ├─ db.js
+   │  └─ validateEnv.js
+   ├─ models/
+   │  ├─ Stock.js
+   │  └─ Watchlist.js
+   ├─ controllers/
+   │  ├─ stockController.js
+   │  ├─ opinionController.js
+   │  └─ watchlistController.js
+   ├─ routes/
+   │  ├─ stockRoutes.js
+   │  ├─ opinionRoutes.js
+   │  ├─ aiRoutes.js
+   │  └─ watchlistRoutes.js
+   ├─ services/
+   │  ├─ stockService.js
+   │  ├─ newsService.js
+   │  └─ aiService.js
+   └─ __tests__/
+      ├─ aiService.test.js
+      ├─ newsService.test.js
+      └─ stockService.test.js
 ```
 
-## Tech Stack (Detailed)
+---
 
-### Frontend stack
+## 🌟 Future Roadmap
 
-| Layer | Technology | Why it is used |
-|---|---|---|
-| App framework | React 19 | Component-based UI and scalable stateful pages |
-| Build tool | Vite 7 | Fast dev server and optimized production build |
-| Routing | React Router 7 | Route-based navigation for Home, Detail, Watchlist, Compare |
-| Styling | Tailwind CSS 4 | Utility-first styling and responsive design speed |
-| Charts | Recharts | Declarative charting for price/sentiment visualizations |
-| Testing | Vitest + RTL | Fast unit/component testing with DOM behavior assertions |
+- [ ] Authenticated users + account-scoped watchlists
+- [ ] CI/CD pipeline (GitHub Actions)
+- [ ] API documentation (OpenAPI/Swagger)
+- [ ] Redis caching tier for sub-second responses
+- [ ] Route-level code splitting + bundle budgets
+- [ ] Real-time WebSocket price updates
+- [ ] Portfolio tracking + P&L calculations
+- [ ] Email alerts on watchlist changes
 
-### Backend stack
+---
 
-| Layer | Technology | Why it is used |
-|---|---|---|
-| Runtime | Node.js | Event-driven backend runtime |
-| Framework | Express 4 | Routing, middleware pipeline, API composition |
-| Database | MongoDB Atlas | Flexible document storage for cache and watchlist |
-| ODM | Mongoose 8 | Schema modeling and DB operations |
-| HTTP client | Axios | External API integrations with timeout control |
-| Security | Helmet, CORS, Rate Limit | Security headers, origin policy, abuse prevention |
-| Validation | express-validator | Input validation at API boundary |
-| Testing | Jest + Supertest | Service and API contract verification |
+## 👤 Author
 
-### External API providers
+**Marmik Kaila**
 
-| Provider | Purpose | Where used |
-|---|---|---|
-| Alpha Vantage | Fundamentals + price history | server/services/stockService.js |
-| NewsAPI | Latest company/market news | server/services/newsService.js |
-| Gemini API | AI sentiment and recommendation tasks | server/services/aiService.js, server/services/newsService.js |
+- 🔗 GitHub: https://github.com/MarmikKaila
+- 💼 LinkedIn: https://www.linkedin.com/in/marmik-kaila-748bab28a/
 
-## End-to-End Request Flow
+---
 
-### 1. Stock detail page
+## ⭐ Support
 
-1. Client navigates to /stock/:symbol.
-2. Client service sends parallel requests:
-   - GET /api/stocks/:symbol
-   - GET /api/opinion/:symbol
-3. Backend stock controller fetches and composes:
-   - Fundamentals
-   - Price/history
-   - News
-   - Sentiment score and history
-4. Backend returns consolidated stock document and cache metadata.
-5. UI renders cards, enhanced chart, sentiment gauge, AI recommendation, and news list.
+If you found this project helpful, please consider giving it a **star** on GitHub! It helps others discover and learn from this codebase.
 
-### 2. Market overview page
+---
 
-1. Client requests GET /api/stocks/market/overview.
-2. Backend loops over popular symbols with cache-first logic.
-3. Per symbol, service composes cached/fresh stock data and lightweight sentiment summary.
-4. UI renders summary cards with watchlist actions.
-
-### 3. Watchlist flow
-
-1. Client creates/stores a stable session id in localStorage.
-2. Context loads GET /api/watchlist/:sessionId.
-3. Add/remove calls use:
-   - POST /api/watchlist/:sessionId/add
-   - DELETE /api/watchlist/:sessionId/:symbol
-4. UI applies optimistic updates and reverts on failure.
-
-## How Everything Works (Deep Dive)
-
-### A) Startup lifecycle
-
-1. Server reads environment variables through dotenv.
-2. validateEnv checks required and optional runtime configuration.
-3. connectDB attempts MongoDB connection; app continues even if DB is unavailable.
-4. Security middleware is mounted in this order: helmet, cors, rate-limiters, body parsers.
-5. API route modules are mounted under /api namespaces.
-
-### B) Stock analysis pipeline
-
-1. Stock symbol enters from route parameter or search input.
-2. Backend validates symbol format (letters only, 1-5 length).
-3. Service layer fetches:
-  - Fundamentals from Alpha Vantage OVERVIEW
-  - Historical prices from TIME_SERIES_DAILY
-  - News headlines from NewsAPI
-4. News sentiment is computed using Gemini model selection logic.
-5. If Gemini is unavailable (quota/model/access), fallback sentiment logic is used.
-6. Sentiment score is normalized and stored with stock payload.
-7. Response includes data quality indicators (mock/fallback status) to inform UI.
-
-### C) Caching strategy
-
-1. Stock data is cached in MongoDB with lastFetchedAt timestamp.
-2. Overview endpoint checks cache freshness before calling providers.
-3. If DB is unavailable, app still returns data by live/mock composition.
-4. This design prioritizes uptime and user-facing continuity.
-
-### D) Watchlist state synchronization
-
-1. Client generates a stable session ID and stores it in localStorage.
-2. Context provider fetches watchlist symbols and hydrated stock docs.
-3. Add/remove actions update UI optimistically for speed.
-4. On server rejection, UI reverts and performs refresh to restore truth state.
-
-### E) Compare page behavior
-
-1. Two symbols are selected by user input/query params.
-2. Client fetches both stock payloads in parallel.
-3. UI computes metric-by-metric deltas and highlights directional advantages.
-4. Shared rendering primitives keep comparison and detail pages visually consistent.
-
-## Frontend Structure
-
-### Application shell and routing
-
-- Entry: [client/src/main.jsx](client/src/main.jsx)
-- Router and provider composition: [client/src/App.jsx](client/src/App.jsx)
-- Routes:
-  - /
-  - /stock/:symbol
-  - /watchlist
-  - /compare
-  - * (not found)
-
-### Key pages
-
-- [client/src/pages/Home.jsx](client/src/pages/Home.jsx): market overview and quick actions
-- [client/src/pages/StockDetail.jsx](client/src/pages/StockDetail.jsx): full analysis page for one ticker
-- [client/src/pages/Watchlist.jsx](client/src/pages/Watchlist.jsx): persistent watchlist view
-- [client/src/pages/Compare.jsx](client/src/pages/Compare.jsx): side-by-side comparison workflow
-- [client/src/pages/NotFound.jsx](client/src/pages/NotFound.jsx): catch-all route
-
-### State and data services
-
-- Watchlist context: [client/src/context/WatchlistContext.jsx](client/src/context/WatchlistContext.jsx)
-- Stock API client: [client/src/services/stockService.js](client/src/services/stockService.js)
-- Watchlist API client: [client/src/services/watchlistService.js](client/src/services/watchlistService.js)
-
-### Visualization and UI components
-
-- Enhanced price chart: [client/src/components/EnhancedPriceChart.jsx](client/src/components/EnhancedPriceChart.jsx)
-- Sentiment gauge: [client/src/components/SentimentGauge.jsx](client/src/components/SentimentGauge.jsx)
-- Stock summary cards: [client/src/components/StockSummaryCard.jsx](client/src/components/StockSummaryCard.jsx)
-- Recommendation block: [client/src/components/AIRecommendation.jsx](client/src/components/AIRecommendation.jsx)
-- News feed and sentiment badges: [client/src/components/NewsFeed.jsx](client/src/components/NewsFeed.jsx), [client/src/components/SentimentBadge.jsx](client/src/components/SentimentBadge.jsx)
-
-## Backend Structure
-
-### App bootstrap and middleware
-
-- Server bootstrap: [server/server.js](server/server.js)
-- DB connection and availability check: [server/config/db.js](server/config/db.js)
-- Environment validation: [server/config/validateEnv.js](server/config/validateEnv.js)
-
-Security and runtime controls currently enabled:
-
-- helmet headers
-- strict CORS allow-list with explicit methods including DELETE
-- global rate limit on /api
-- stricter rate limit for /api/ai
-- JSON and URL-encoded body size limits
-- centralized error middleware
-
-### API surface
-
-#### Stock routes
-
-- GET /api/stocks/market/overview
-- GET /api/stocks/:symbol
-- GET /api/stocks/:symbol/history?range=7d|30d|90d
-
-Definitions: [server/routes/stockRoutes.js](server/routes/stockRoutes.js)
-
-#### Opinion and AI routes
-
-- GET /api/opinion/:symbol
-- POST /api/ai/recommend
-- POST /api/ai/summarize
-
-Definitions: [server/routes/opinionRoutes.js](server/routes/opinionRoutes.js), [server/routes/aiRoutes.js](server/routes/aiRoutes.js)
-
-#### Watchlist routes
-
-- GET /api/watchlist/:sessionId
-- POST /api/watchlist/:sessionId/add
-- DELETE /api/watchlist/:sessionId/:symbol
-
-Definitions: [server/routes/watchlistRoutes.js](server/routes/watchlistRoutes.js)
-
-### Core controllers and services
-
-- Stock controller: [server/controllers/stockController.js](server/controllers/stockController.js)
-- Opinion controller: [server/controllers/opinionController.js](server/controllers/opinionController.js)
-- Watchlist controller: [server/controllers/watchlistController.js](server/controllers/watchlistController.js)
-- Market data service: [server/services/stockService.js](server/services/stockService.js)
-- News + sentiment service: [server/services/newsService.js](server/services/newsService.js)
-- AI integration service: [server/services/aiService.js](server/services/aiService.js)
-
-## Data Model
-
-### Stock cache model
-
-- Schema location: [server/models/Stock.js](server/models/Stock.js)
-- Purpose: stores normalized stock snapshot, sentiment metadata, and fetch timestamps to reduce external API pressure.
-
-### Watchlist model
-
-- Schema location: [server/models/Watchlist.js](server/models/Watchlist.js)
-- Fields:
-  - sessionId (indexed)
-  - symbols array
-  - timestamps
-- Guardrail: max 20 symbols enforced in controller logic.
-
-## Environment Configuration
-
-Use [server/.env.example](server/.env.example) as template.
-
-Expected variables:
-
-- PORT
-- MONGO_URI
-- ALPHA_VANTAGE_API_KEY
-- NEWSAPI_KEY
-- GEMINI_API_KEY
-- COHERE_API_KEY (optional in current flow)
-- CORS_ORIGINS (optional, comma-separated)
-
-### API keys and exactly what they do
-
-| Variable | Required | Used for | Source |
-|---|---|---|---|
-| ALPHA_VANTAGE_API_KEY | Optional but recommended | Fundamentals + historical prices | https://www.alphavantage.co/support/#api-key |
-| NEWSAPI_KEY | Optional but recommended | News headline ingestion | https://newsapi.org/register |
-| GEMINI_API_KEY | Required | AI sentiment/recommendation generation | https://aistudio.google.com/app/apikey |
-| COHERE_API_KEY | Optional | Reserved for optional model strategy/extensions | https://dashboard.cohere.com/api-keys |
-
-### Example .env template (safe placeholders)
-
-```env
-PORT=5000
-MONGO_URI=mongodb+srv://<username>:<password>@<cluster>.mongodb.net/?retryWrites=true&w=majority
-ALPHA_VANTAGE_API_KEY=your_alpha_vantage_key_here
-NEWSAPI_KEY=your_newsapi_key_here
-GEMINI_API_KEY=your_gemini_key_here
-COHERE_API_KEY=your_cohere_key_here
-CORS_ORIGINS=http://localhost:5173,http://localhost:3000
-```
-
-### Security guidance for keys
-
-- Never commit real keys in any tracked file.
-- Keep only placeholders in .env.example.
-- Rotate keys immediately if leaked.
-- Prefer per-environment keys (dev/stage/prod) with restricted quotas.
-
-Important:
-
-- Never commit real credentials.
-- Keep [server/.env](server/.env) local-only.
-
-## Local Development
-
-### Prerequisites
-
-- Node.js 18+
-- npm
-- MongoDB Atlas connection string
-
-### 1) Install dependencies
-
-```bash
-cd server && npm install
-cd ../client && npm install
-```
-
-### 2) Configure environment
-
-```bash
-cd server
-cp .env.example .env
-```
-
-Then edit .env with your own credentials.
-
-### 3) Run backend
-
-```bash
-cd server
-npm run dev
-```
-
-### 4) Run frontend
-
-```bash
-cd client
-npm run dev
-```
-
-Frontend: http://localhost:5173
-Backend: http://localhost:5000
-
-## Test Strategy
-
-### Backend
-
-- Frameworks: Jest + Supertest
-- Commands:
-
-```bash
-cd server
-npm test
-npm run test:coverage
-```
-
-### Frontend
-
-- Frameworks: Vitest + React Testing Library
-- Commands:
-
-```bash
-cd client
-npm test
-npm run test:coverage
-```
-
-Current test files include:
-
-- [server/__tests__/stockService.test.js](server/__tests__/stockService.test.js)
-- [server/__tests__/newsService.test.js](server/__tests__/newsService.test.js)
-- [server/__tests__/aiService.test.js](server/__tests__/aiService.test.js)
-- [client/src/__tests__/services/stockService.test.js](client/src/__tests__/services/stockService.test.js)
-- [client/src/__tests__/components/Navbar.test.jsx](client/src/__tests__/components/Navbar.test.jsx)
-- [client/src/__tests__/components/StockCard.test.jsx](client/src/__tests__/components/StockCard.test.jsx)
-- [client/src/__tests__/components/SentimentBadge.test.jsx](client/src/__tests__/components/SentimentBadge.test.jsx)
-
-## Build and Verification
-
-### Frontend production build
-
-```bash
-cd client
-npm run build
-```
-
-### Backend syntax verification
-
-```bash
-cd server
-node -c server.js
-```
-
-## Reliability and Fallback Behavior
-
-- If MongoDB is unavailable:
-  - App continues serving responses without DB caching.
-- If Gemini quota/model is unavailable:
-  - Sentiment/recommendation falls back to keyword/rule-based logic where implemented.
-- If external provider limits are reached:
-  - Services return mock or partial-safe payloads to keep UI functional.
-
-## Performance and Operational Notes
-
-- Cache-first market overview to reduce third-party calls
-- Request validation at route boundaries to reject malformed payloads early
-- Explicit AI endpoint throttling to protect quota and cost
-- Preflight CORS policy includes DELETE for watchlist mutation paths
-
-## Security Notes
-
-- Helmet enabled for common HTTP hardening headers
-- CORS allow-list driven by CORS_ORIGINS
-- Input validation via express-validator
-- Rate limiting via express-rate-limit
-- Body size limits configured for abuse mitigation
-
-## Known Constraints
-
-- Free-tier third-party API limits can trigger degraded mode
-- Watchlist identity is session-based, not account-authenticated
-- Bundle size warning may appear in production builds without route-level code splitting
-
-## Roadmap
-
-- Add authenticated users and account-scoped watchlists
-- Add CI pipeline gates (lint, unit, integration)
-- Add API docs via OpenAPI/Swagger
-- Add Redis for low-latency cache tier
-- Add route-level code splitting and bundle budgets
-
-## Author
-
-Marmik Kaila
-
-- GitHub: https://github.com/MarmikKaila
-- LinkedIn: https://www.linkedin.com/in/marmik-kaila-748bab28a/
-
-If this project is useful, consider starring the repository.
-**⭐ If you found this project helpful, please consider giving it a star!**
+**Last updated:** March 2026  
+**License:** ISC
