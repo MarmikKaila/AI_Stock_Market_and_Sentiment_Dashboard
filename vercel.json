@@ -1,0 +1,28 @@
+{
+  "buildCommand": "npm install --prefix server && npm install --prefix client && npm run build --prefix client",
+  "outputDirectory": "client/dist",
+  "rewrites": [
+    {
+      "source": "/api/:match*",
+      "destination": "/api/:match*"
+    },
+    {
+      "source": "/:path*",
+      "destination": "/index.html"
+    }
+  ],
+  "env": {
+    "MONGODB_URI": "@mongodb_uri",
+    "GEMINI_API_KEY": "@gemini_api_key",
+    "ALPHA_VANTAGE_API_KEY": "@alpha_vantage_api_key",
+    "NEWSAPI_KEY": "@newsapi_key",
+    "CORS_ORIGINS": "@cors_origins",
+    "PORT": "3001"
+  },
+  "functions": {
+    "server/api/index.js": {
+      "memory": 1024,
+      "maxDuration": 60
+    }
+  }
+}
