@@ -4,13 +4,16 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-dotenv.config({ path: '../.env' });
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.join(__dirname, 'server', '.env') });
 
 // Import routes
-import stockRoutes from '../routes/stockRoutes.js';
-import opinionRoutes from '../routes/opinionRoutes.js';
-import watchlistRoutes from '../routes/watchlistRoutes.js';
+import stockRoutes from '../server/routes/stockRoutes.js';
+import opinionRoutes from '../server/routes/opinionRoutes.js';
+import watchlistRoutes from '../server/routes/watchlistRoutes.js';
 
 const app = express();
 
