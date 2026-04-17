@@ -1,7 +1,6 @@
 {
   "name": "server",
   "version": "1.0.0",
-  "type": "module",
   "description": "AI Stock Market Sentiment Dashboard",
   "main": "server.js",
   "scripts": {
