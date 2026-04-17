@@ -50,3 +50,41 @@ out
 # Misc
 .cache
 *.log
+
+# AWS Terraform & Infrastructure
+aws/terraform/.terraform/
+aws/terraform/.terraform.lock.hcl
+aws/terraform/terraform.exe
+aws/terraform/terraform.zip
+aws/terraform/tfplan
+aws/terraform/terraform.tfstate
+aws/terraform/terraform.tfstate.backup
+aws/lambda/**/*.zip
+aws/lambda-layers/**/*.zip
+
+# Large binaries
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Node modules in all directories
+**/node_modules/
+node_modules/
+.pnpm-store/
+
+# Confidential/sensitive files
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+.env*
+!.env.example
+
+# Generated files
+dist/
+build/
+*.zip
+tfplan
+.terraform.lock.hcl
