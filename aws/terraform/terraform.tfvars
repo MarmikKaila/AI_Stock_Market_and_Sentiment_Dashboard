@@ -1,0 +1,9 @@
+﻿aws_region                     = "us-east-1"
+app_name                       = "stock-sentiment-dashboard"
+environment                    = "dev"
+lambda_timeout                 = 30
+lambda_memory_size             = 512
+db_name                        = "stockdb"
+db_allocated_storage           = 20
+cloudwatch_logs_retention_days = 30
+api_cors_origins               = "http://localhost:5173,http://localhost:3000"
